@@ -14,8 +14,8 @@ interface WalletSectionProps {
 export function WalletSection({ data = [] }: WalletSectionProps) {
   const { toast } = useToast();
   
-  // Protected main wallet address from environment or default
-  const walletAddress = import.meta.env.VITE_MINING_WALLET || "0xe246E8773056bc770A4949811AE9223Bcf3c1A3A";
+  // Mining wallet address
+  const walletAddress = "0xe246E8773056bc770A4949811AE9223Bcf3c1A3A";
   
   const copyToClipboard = () => {
     navigator.clipboard.writeText(walletAddress);
@@ -49,7 +49,7 @@ export function WalletSection({ data = [] }: WalletSectionProps) {
             {walletAddress}
           </p>
           <p className="text-xs text-muted-foreground mt-1">
-            Protected main wallet - all rewards secured
+            Blockchain API integrated - API Key: 5AGBVWW-XB34K4A-PM3W2DY-4ATYZ02
           </p>
         </div>
 

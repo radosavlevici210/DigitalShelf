@@ -137,6 +137,72 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Blockchain API integration for share submission
+  app.post("/api/mining/submit-share", async (req, res) => {
+    try {
+      const { wallet, nonce, hash, difficulty, apiKey } = req.body;
+      
+      // Submit share to blockchain API
+      const response = await fetch('https://api.blockchain.info/mining/submit', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey || process.env.BLOCKCHAIN_API_KEY}`
+        },
+        body: JSON.stringify({
+          wallet_address: wallet,
+          nonce,
+          hash,
+          difficulty,
+          timestamp: Date.now()
+        })
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        
+        // Create wallet transaction record
+        await storage.createWalletTransaction({
+          userId: 1, // Demo user
+          amount: 0.001, // Reward amount
+          transactionHash: result.txHash || hash,
+          type: 'earning',
+          status: 'confirmed'
+        });
+
+        res.json({ success: true, result });
+      } else {
+        res.status(400).json({ error: "Share submission failed" });
+      }
+    } catch (error) {
+      console.error('Blockchain API error:', error);
+      res.status(500).json({ error: "Failed to submit share to blockchain" });
+    }
+  });
+
+  // Wallet balance check
+  app.get("/api/wallet/balance/:address", async (req, res) => {
+    try {
+      const { address } = req.params;
+      
+      const response = await fetch(`https://api.blockchain.info/balance/${address}`, {
+        headers: {
+          'Authorization': `Bearer ${process.env.BLOCKCHAIN_API_KEY}`
+        }
+      });
+
+      if (response.ok) {
+        const balance = await response.json();
+        res.json(balance);
+      } else {
+        res.status(400).json({ error: "Failed to fetch wallet balance" });
+      }
+    } catch (error) {
+      console.error('Wallet balance error:', error);
+      res.status(500).json({ error: "Failed to check wallet balance" });
+    }
+  });
+
   // WebSocket Server for real-time updates
   const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
   const clients = new Set<WebSocket>();
@@ -226,6 +292,17 @@ async function initializeMiningPools() {
       });
       
       console.log('Initialized default mining pools');
+    }
+
+    // Initialize demo user if doesn't exist
+    const existingUser = await storage.getUserByUsername('demo_miner');
+    if (!existingUser) {
+      await storage.createUser({
+        username: 'demo_miner',
+        password: 'demo123',
+        walletAddress: '0xe246E8773056bc770A4949811AE9223Bcf3c1A3A'
+      });
+      console.log('Created demo user');
     }
   } catch (error) {
     console.error('Error initializing mining pools:', error);

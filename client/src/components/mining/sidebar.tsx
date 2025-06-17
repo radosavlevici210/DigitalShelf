@@ -30,15 +30,15 @@ export function Sidebar() {
           const isActive = location === item.href;
           return (
             <Link key={item.href} href={item.href}>
-              <a className={cn(
-                "flex items-center space-x-3 px-3 py-2 rounded-lg font-medium transition-colors",
+              <div className={cn(
+                "flex items-center space-x-3 px-3 py-2 rounded-lg font-medium transition-colors cursor-pointer",
                 isActive 
                   ? "bg-primary text-primary-foreground"
                   : "text-muted-foreground hover:text-secondary-foreground hover:bg-secondary"
               )}>
                 <item.icon className="w-5 h-5" />
                 <span>{item.label}</span>
-              </a>
+              </div>
             </Link>
           );
         })}

