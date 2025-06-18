@@ -104,7 +104,12 @@ RESTful API endpoints organized by domain:
 
 ## Changelog
 
-- June 18, 2025. Initial setup
+- June 18, 2025: Initial setup
+- June 18, 2025: Completed migration from Replit Agent to standard Replit environment
+  - Set up PostgreSQL database with all required tables
+  - Fixed routing issues and verified dashboard functionality
+  - Confirmed real-time WebSocket connections and data flow
+  - Application fully operational with mining wallet: 0xe246E8773056bc770A4949811AE9223Bcf3c1A3A
 
 ## User Preferences
 
