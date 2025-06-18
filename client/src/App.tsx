@@ -8,11 +8,14 @@ import NotFound from "@/pages/not-found";
 
 function Router() {
   return (
-    <Switch>
-      <Route path="/" component={Dashboard} />
-      <Route path="/dashboard" component={Dashboard} />
-      <Route component={NotFound} />
-    </Switch>
+    <div>
+      <Switch>
+        <Route path="/" component={Dashboard} />
+        <Route path="/dashboard" component={Dashboard} />
+        <Route component={NotFound} />
+      </Switch>
+      <Toaster position="top-right" />
+    </div>
   );
 }
 
