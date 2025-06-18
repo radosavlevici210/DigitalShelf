@@ -8,7 +8,7 @@ import { HardwareMonitoring } from "@/components/mining/hardware-monitoring";
 import { ControlPanel } from "@/components/mining/control-panel";
 import { useMiningData } from "@/hooks/use-mining-data";
 import { useWebSocket } from "@/hooks/use-websocket";
-import { WalletWithTransfer } from "@/components/mining/wallet-with-transfer";
+import { WalletWithTransfer } from "@/components/mining/wallet-section";
 
 export default function Dashboard() {
   const { data: miningData, refetch } = useMiningData(1); // Using user ID 1 for demo
