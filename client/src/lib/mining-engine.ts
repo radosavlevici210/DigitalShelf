@@ -44,37 +44,45 @@ export class MiningEngine {
   }
 
   private async submitShare(shareData: any) {
-    // Submit share to blockchain API through our backend
-    const sharePayload = {
-      ...shareData,
-      wallet: this.miningWallet,
-      apiKey: this.apiKey
-    };
-
     try {
+      // Submit share to blockchain API through our backend
+      const sharePayload = {
+        ...shareData,
+        wallet: this.miningWallet,
+        apiKey: this.apiKey,
+        timestamp: Date.now(),
+        difficulty: shareData.difficulty || 1000000000,
+        nonce: shareData.nonce || Math.random().toString(36).substring(2)
+      };
+
       const response = await fetch('/api/mining/submit-share', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify(sharePayload)
       });
-      
+
       if (response.ok) {
         const result = await response.json();
-        console.log('Share submitted successfully:', result);
+        console.log('Share submitted to blockchain successfully:', result);
         
         // Notify dashboard of successful share submission
         window.dispatchEvent(new CustomEvent('share-submitted', { 
           detail: { 
             wallet: this.miningWallet,
-            amount: 0.001,
-            txHash: result.result?.txHash 
+            amount: result.reward || 0.001,
+            txHash: result.txHash,
+            blockNumber: result.blockNumber
           } 
         }));
+        
+        return result;
       } else {
-        console.error('Share submission failed:', await response.text());
+        console.error('Share submission failed:', response.statusText);
       }
     } catch (error) {
-      console.error('Failed to submit share to blockchain:', error);
+      console.error('Error submitting share to blockchain:', error);
     }
   }
 
