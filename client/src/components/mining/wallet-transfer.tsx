@@ -1,99 +1,84 @@
-
 import { useState, useEffect } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Send, CheckCircle, AlertCircle, Clock, ExternalLink, Copy } from "lucide-react";
-import { blockchainAPI } from "@/lib/blockchain-api";
+import { Loader2, Send, Wallet, TrendingUp } from "lucide-react";
 
 interface WalletTransferProps {
   availableBalance: number;
+  onTransferComplete?: (amount: number, txHash: string) => void;
 }
 
-interface TransferHistory {
-  id: string;
-  amount: number;
-  recipient: string;
-  status: 'pending' | 'confirmed' | 'failed';
-  timestamp: Date;
-  txHash?: string;
-  fee: number;
-}
-
-export function WalletTransfer({ availableBalance }: WalletTransferProps) {
+export function WalletTransfer({ availableBalance, onTransferComplete }: WalletTransferProps) {
+  const { toast } = useToast();
   const [toAddress, setToAddress] = useState("");
   const [amount, setAmount] = useState("");
   const [transferMethod, setTransferMethod] = useState("standard");
   const [isTransferring, setIsTransferring] = useState(false);
-  const [isValidAddress, setIsValidAddress] = useState(false);
-  const [estimatedFee, setEstimatedFee] = useState(0);
   const [ethPrice, setEthPrice] = useState(0);
-  const [transferHistory, setTransferHistory] = useState<TransferHistory[]>([]);
+  const [estimatedFee, setEstimatedFee] = useState(0.001);
   const [realTimeBalance, setRealTimeBalance] = useState(availableBalance);
-  const { toast } = useToast();
 
-  const fees = {
-    standard: 0.001,
-    fast: 0.003,
-    instant: 0.005
+  // Update real-time balance when prop changes
+  useEffect(() => {
+    setRealTimeBalance(availableBalance);
+  }, [availableBalance]);
+
+  // Fetch ETH price
+  useEffect(() => {
+    const fetchEthPrice = async () => {
+      try {
+        const response = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd');
+        const data = await response.json();
+        setEthPrice(data.ethereum?.usd || 0);
+      } catch (error) {
+        console.error('Failed to fetch ETH price:', error);
+      }
+    };
+
+    fetchEthPrice();
+    const interval = setInterval(fetchEthPrice, 30000); // Update every 30 seconds
+    return () => clearInterval(interval);
+  }, []);
+
+  // Update estimated fee based on transfer method
+  useEffect(() => {
+    const fees = {
+      standard: 0.001,
+      fast: 0.003,
+      instant: 0.005
+    };
+    setEstimatedFee(fees[transferMethod as keyof typeof fees] || 0.001);
+  }, [transferMethod]);
+
+  const validateAddress = (address: string): boolean => {
+    return /^0x[a-fA-F0-9]{40}$/.test(address);
   };
 
-  // Real-time blockchain integration
-  useEffect(() => {
-    const fetchBlockchainData = async () => {
-      try {
-        const price = await blockchainAPI.getEthereumPrice();
-        setEthPrice(price);
-        
-        const walletAddress = "0xe246E8773056bc770A4949811AE9223Bcf3c1A3A";
-        const balance = await blockchainAPI.getWalletBalance(walletAddress);
-        setRealTimeBalance(balance);
-        
-        const fee = await blockchainAPI.estimateTransferFee(parseFloat(amount) || 0);
-        setEstimatedFee(fee);
-      } catch (error) {
-        console.error("Error fetching blockchain data:", error);
-      }
-    };
-
-    fetchBlockchainData();
-    const interval = setInterval(fetchBlockchainData, 30000); // Update every 30 seconds
-    
-    return () => clearInterval(interval);
-  }, [amount]);
-
-  // Address validation
-  useEffect(() => {
-    const validateAddress = async () => {
-      if (toAddress.length >= 42) {
-        const valid = await blockchainAPI.validateAddress(toAddress);
-        setIsValidAddress(valid);
-      } else {
-        setIsValidAddress(false);
-      }
-    };
-
-    if (toAddress) {
-      validateAddress();
-    }
-  }, [toAddress]);
-
-  const handleCustomTransfer = async () => {
-    if (!toAddress || !amount) {
+  const handleTransfer = async () => {
+    if (!toAddress || !validateAddress(toAddress)) {
       toast({
         title: "Error",
-        description: "Please enter destination address and amount",
+        description: "Please enter a valid Ethereum address",
         variant: "destructive"
       });
       return;
     }
 
     const transferAmount = parseFloat(amount);
-    const fee = estimatedFee;
+    if (!transferAmount || transferAmount <= 0) {
+      toast({
+        title: "Error", 
+        description: "Please enter a valid transfer amount",
+        variant: "destructive"
+      });
+      return;
+    }
 
+    const fee = estimatedFee;
     if (transferAmount + fee > realTimeBalance) {
       toast({
         title: "Error",
@@ -122,103 +107,29 @@ export function WalletTransfer({ availableBalance }: WalletTransferProps) {
 
       const result = await response.json();
 
-      if (response.ok) {
-        const newTransfer: TransferHistory = {
-          id: Date.now().toString(),
-          amount: transferAmount,
-          recipient: toAddress,
-          status: 'pending',
-          timestamp: new Date(),
-          txHash: result.txHash,
-          fee: fee
-        };
-        
-        setTransferHistory(prev => [newTransfer, ...prev]);
-        
-        toast({
-          title: "Transfer Initiated",
-          description: `${transferAmount.toFixed(6)} ETH transfer to ${toAddress.slice(0, 10)}... initiated`,
-        });
-        
-        setToAddress("");
-        setAmount("");
-      } else {
-        toast({
-          title: "Transfer Failed",
-          description: result.error || "Unknown error occurred",
-          variant: "destructive"
-        });
-      }
-    } catch (error) {
-      toast({
-        title: "Transfer Failed",
-        description: "Network error occurred",
-        variant: "destructive"
-      });
-    } finally {
-      setIsTransferring(false);
-    }
-  };
-
-  const handleTransferAll = async () => {
-    if (!toAddress) {
-      toast({
-        title: "Error",
-        description: "Please enter a destination wallet address",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    const fee = fees[transferMethod as keyof typeof fees];
-    const transferAmount = availableBalance - fee;
-
-    if (transferAmount <= 0) {
-      toast({
-        title: "Error", 
-        description: "Insufficient balance to cover transfer fees",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    setIsTransferring(true);
-
-    try {
-      const response = await fetch('/api/wallet/transfer', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          fromAddress: "0xe246E8773056bc770A4949811AE9223Bcf3c1A3A",
-          toAddress,
-          amount: transferAmount,
-          apiKey: "5AGBVWW-XB34K4A-PM3W2DY-4ATYZ02",
-          method: transferMethod
-        })
-      });
-
-      const result = await response.json();
-
-      if (response.ok) {
+      if (response.ok && result.success) {
         toast({
           title: "Transfer Successful",
-          description: `${transferAmount.toFixed(6)} ETH transferred to ${toAddress}. TX: ${result.txHash}`,
+          description: `Transferred ${transferAmount} ETH to ${toAddress.slice(0, 6)}...${toAddress.slice(-4)}`,
         });
+
+        // Update balance
+        setRealTimeBalance(prev => prev - transferAmount - fee);
+
+        // Reset form
         setToAddress("");
         setAmount("");
+
+        // Notify parent component
+        onTransferComplete?.(transferAmount, result.txHash);
       } else {
-        toast({
-          title: "Transfer Failed",
-          description: result.error || "Unknown error occurred",
-          variant: "destructive"
-        });
+        throw new Error(result.error || 'Transfer failed');
       }
     } catch (error) {
+      console.error('Transfer error:', error);
       toast({
         title: "Transfer Failed",
-        description: "Network error occurred",
+        description: error instanceof Error ? error.message : "Failed to process transfer",
         variant: "destructive"
       });
     } finally {
@@ -226,78 +137,24 @@ export function WalletTransfer({ availableBalance }: WalletTransferProps) {
     }
   };
 
-  const handleWithdrawAll = async () => {
-    if (!toAddress) {
-      toast({
-        title: "Error",
-        description: "Please enter a destination wallet address",
-        variant: "destructive"
-      });
-      return;
-    }
+  const handleCustomTransfer = async (customAmount: number, targetAddress: string) => {
+    setAmount(customAmount.toString());
+    setToAddress(targetAddress);
 
-    const fee = fees[transferMethod as keyof typeof fees];
-    const withdrawAmount = availableBalance - fee;
-
-    if (withdrawAmount <= 0) {
-      toast({
-        title: "Error",
-        description: "Insufficient balance to cover withdrawal fees", 
-        variant: "destructive"
-      });
-      return;
-    }
-
-    setIsTransferring(true);
-
-    try {
-      const response = await fetch('/api/wallet/withdraw', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          toAddress,
-          amount: withdrawAmount,
-          apiKey: "5AGBVWW-XB34K4A-PM3W2DY-4ATYZ02",
-          withdrawalMethod: transferMethod
-        })
-      });
-
-      const result = await response.json();
-
-      if (response.ok) {
-        toast({
-          title: "Withdrawal Successful",
-          description: `${withdrawAmount.toFixed(6)} ETH withdrawn to ${toAddress}. TX: ${result.txHash}`,
-        });
-        setToAddress("");
-      } else {
-        toast({
-          title: "Withdrawal Failed",
-          description: result.error || "Unknown error occurred",
-          variant: "destructive"
-        });
-      }
-    } catch (error) {
-      toast({
-        title: "Withdrawal Failed", 
-        description: "Network error occurred",
-        variant: "destructive"
-      });
-    } finally {
-      setIsTransferring(false);
-    }
+    // Auto-trigger transfer for custom amounts
+    setTimeout(() => {
+      handleTransfer();
+    }, 500);
   };
 
-  const fee = fees[transferMethod as keyof typeof fees];
-  const maxTransferAmount = Math.max(0, availableBalance - fee);
+  const maxTransferAmount = Math.max(0, realTimeBalance - estimatedFee);
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-lg font-semibold text-card-foreground">
-          Transfer All Cryptocurrency
+        <CardTitle className="text-lg font-semibold text-card-foreground flex items-center gap-2">
+          <Send className="w-5 h-5" />
+          Transfer Cryptocurrency
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -305,11 +162,11 @@ export function WalletTransfer({ availableBalance }: WalletTransferProps) {
           <div>
             <p className="text-xs text-muted-foreground">Available Balance</p>
             <p className="text-lg font-bold text-card-foreground">
-              {availableBalance.toFixed(6)} ETH
+              {realTimeBalance.toFixed(6)} ETH
             </p>
           </div>
           <div>
-            <p className="text-xs text-muted-foreground">Transfer Amount</p>
+            <p className="text-xs text-muted-foreground">Max Transfer</p>
             <p className="text-lg font-bold text-accent">
               {maxTransferAmount.toFixed(6)} ETH
             </p>
@@ -317,34 +174,14 @@ export function WalletTransfer({ availableBalance }: WalletTransferProps) {
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="toAddress">Destination Wallet Address</Label>
-          <div className="relative">
-            <Input
-              id="toAddress"
-              placeholder="0x..."
-              value={toAddress}
-              onChange={(e) => setToAddress(e.target.value)}
-              className={`font-mono text-sm pr-10 ${
-                toAddress && !isValidAddress 
-                  ? 'border-red-500 focus:border-red-500' 
-                  : toAddress && isValidAddress 
-                    ? 'border-green-500 focus:border-green-500' 
-                    : ''
-              }`}
-            />
-            {toAddress && (
-              <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-                {isValidAddress ? (
-                  <CheckCircle className="h-4 w-4 text-green-500" />
-                ) : (
-                  <AlertCircle className="h-4 w-4 text-red-500" />
-                )}
-              </div>
-            )}
-          </div>
-          {toAddress && !isValidAddress && (
-            <p className="text-xs text-red-500">Invalid Ethereum address format</p>
-          )}
+          <Label htmlFor="address">Recipient Address</Label>
+          <Input
+            id="address"
+            placeholder="0x..."
+            value={toAddress}
+            onChange={(e) => setToAddress(e.target.value)}
+            className="font-mono text-sm"
+          />
         </div>
 
         <div className="space-y-2">
@@ -372,101 +209,82 @@ export function WalletTransfer({ availableBalance }: WalletTransferProps) {
             type="button"
             variant="outline"
             size="sm"
-            onClick={() => setAmount((realTimeBalance - estimatedFee).toString())}
+            onClick={() => setAmount(maxTransferAmount.toString())}
             className="text-xs"
           >
-            Max: {(realTimeBalance - estimatedFee).toFixed(6)} ETH
+            Max: {maxTransferAmount.toFixed(6)} ETH
           </Button>
         </div>
 
         <div className="space-y-2">
-          <Label>Transfer Method</Label>
-          <select 
-            value={transferMethod} 
-            onChange={(e) => setTransferMethod(e.target.value)}
-            className="w-full p-2 border rounded-md bg-background text-foreground"
-          >
-            <option value="standard">Standard (10-30 min) - {fees.standard} ETH fee</option>
-            <option value="fast">Fast (3-10 min) - {fees.fast} ETH fee</option>
-            <option value="instant">Instant (1-3 min) - {fees.instant} ETH fee</option>
-          </select>
+          <Label htmlFor="method">Transfer Method</Label>
+          <Select value={transferMethod} onValueChange={setTransferMethod}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="standard">Standard (10-30 min) - 0.001 ETH</SelectItem>
+              <SelectItem value="fast">Fast (3-10 min) - 0.003 ETH</SelectItem>
+              <SelectItem value="instant">Instant (1-3 min) - 0.005 ETH</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
-        <div className="pt-2 space-y-2">
-          <div className="flex justify-between text-xs">
+        <div className="bg-secondary/20 p-3 rounded-lg space-y-2">
+          <div className="flex justify-between text-sm">
+            <span className="text-muted-foreground">Transfer Amount:</span>
+            <span className="text-card-foreground">{amount || '0'} ETH</span>
+          </div>
+          <div className="flex justify-between text-sm">
             <span className="text-muted-foreground">Network Fee:</span>
-            <span className="text-foreground">{estimatedFee.toFixed(6)} ETH</span>
+            <span className="text-card-foreground">{estimatedFee.toFixed(6)} ETH</span>
           </div>
-          <div className="flex justify-between text-xs">
-            <span className="text-muted-foreground">Real-time Balance:</span>
-            <span className="text-foreground">{realTimeBalance.toFixed(6)} ETH</span>
+          <div className="flex justify-between text-sm font-semibold">
+            <span className="text-card-foreground">Total:</span>
+            <span className="text-card-foreground">
+              {(parseFloat(amount || '0') + estimatedFee).toFixed(6)} ETH
+            </span>
           </div>
-          {ethPrice > 0 && (
-            <div className="flex justify-between text-xs">
-              <span className="text-muted-foreground">ETH Price:</span>
-              <span className="text-foreground">${ethPrice.toFixed(2)}</span>
-            </div>
+        </div>
+
+        <Button 
+          onClick={handleTransfer} 
+          disabled={isTransferring || !toAddress || !amount}
+          className="w-full"
+        >
+          {isTransferring ? (
+            <>
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              Processing Transfer...
+            </>
+          ) : (
+            <>
+              <Send className="w-4 h-4 mr-2" />
+              Transfer Cryptocurrency
+            </>
           )}
-        </div>
+        </Button>
 
-        <div className="grid grid-cols-1 gap-2">
-          <Button 
-            onClick={handleTransferAll}
-            disabled={isTransferring || !toAddress || !isValidAddress}
-            className="bg-primary text-primary-foreground hover:bg-primary/90"
-          >
-            {isTransferring ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              <Send className="mr-2 h-4 w-4" />
-            )}
-            Transfer All
-          </Button>
-          
-          <Button 
-            onClick={handleWithdrawAll}
-            disabled={isTransferring || !toAddress || !isValidAddress}
+        <div className="grid grid-cols-2 gap-2">
+          <Button
             variant="outline"
+            size="sm"
+            onClick={() => handleCustomTransfer(0.001, "0x742d35Cc6635C0532925a3b8D0b5b6B65D98F2F9")}
+            disabled={isTransferring}
           >
-            {isTransferring ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              <Send className="mr-2 h-4 w-4" />
-            )}
-            Withdraw All to External
+            <Wallet className="w-3 h-3 mr-1" />
+            Test 0.001 ETH
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => handleCustomTransfer(maxTransferAmount, "0x8ba1f109551bD432803012645Hac136c4c7ae673")}
+            disabled={isTransferring || maxTransferAmount <= 0}
+          >
+            <TrendingUp className="w-3 h-3 mr-1" />
+            Max Transfer
           </Button>
         </div>
-
-        {transferHistory.length > 0 && (
-          <div className="mt-6 space-y-2">
-            <Label className="text-sm font-semibold">Recent Transfers</Label>
-            <div className="space-y-2 max-h-32 overflow-y-auto">
-              {transferHistory.slice(0, 3).map((transfer) => (
-                <div key={transfer.id} className="flex items-center justify-between p-2 bg-secondary/20 rounded-lg">
-                  <div className="flex items-center space-x-2">
-                    {transfer.status === 'pending' && <Clock className="h-3 w-3 text-yellow-500" />}
-                    {transfer.status === 'confirmed' && <CheckCircle className="h-3 w-3 text-green-500" />}
-                    {transfer.status === 'failed' && <AlertCircle className="h-3 w-3 text-red-500" />}
-                    <div>
-                      <p className="text-xs font-mono">{transfer.recipient.slice(0, 10)}...</p>
-                      <p className="text-xs text-muted-foreground">{transfer.amount.toFixed(6)} ETH</p>
-                    </div>
-                  </div>
-                  {transfer.txHash && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => window.open(`https://etherscan.io/tx/${transfer.txHash}`, '_blank')}
-                      className="h-6 w-6 p-0"
-                    >
-                      <ExternalLink className="h-3 w-3" />
-                    </Button>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
       </CardContent>
     </Card>
   );

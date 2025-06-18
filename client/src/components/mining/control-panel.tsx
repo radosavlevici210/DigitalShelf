@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { StopCircle, RefreshCw, Settings } from "lucide-react";
+import { useState, useEffect } from "react";
+import { StopCircle, RefreshCw, Settings, Play } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
@@ -12,20 +12,71 @@ export function ControlPanel() {
   const [powerLimit, setPowerLimit] = useState([85]);
   const [memoryClock, setMemoryClock] = useState([800]);
   const [coreClock, setCoreClock] = useState([100]);
+  const [isMining, setIsMining] = useState(false);
+  const [miningEngine, setMiningEngine] = useState<any>(null);
+
+  useEffect(() => {
+    // Dynamically import mining engine
+    const initMiningEngine = async () => {
+      try {
+        const { miningEngine } = await import('@/lib/mining-engine');
+        setMiningEngine(miningEngine);
+        
+        // Check initial mining status
+        const status = miningEngine.getStatus();
+        setIsMining(status.isRunning);
+      } catch (error) {
+        console.error('Failed to initialize mining engine:', error);
+      }
+    };
+
+    initMiningEngine();
+
+    // Listen for mining events
+    const handleMiningStarted = () => setIsMining(true);
+    const handleMiningStopped = () => setIsMining(false);
+
+    window.addEventListener('mining-started', handleMiningStarted);
+    window.addEventListener('mining-stopped', handleMiningStopped);
+
+    return () => {
+      window.removeEventListener('mining-started', handleMiningStarted);
+      window.removeEventListener('mining-stopped', handleMiningStopped);
+    };
+  }, []);
 
   const handleStopMining = () => {
-    toast({
-      title: "Mining Stopped",
-      description: "All mining operations have been halted",
-      variant: "destructive",
-    });
+    if (miningEngine) {
+      miningEngine.stop();
+      toast({
+        title: "Mining Stopped",
+        description: "All mining operations have been halted",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleStartMining = () => {
+    if (miningEngine) {
+      miningEngine.start();
+      toast({
+        title: "Mining Started",
+        description: "Mining operations have commenced",
+      });
+    }
   };
 
   const handleRestartMining = () => {
-    toast({
-      title: "Workers Restarted",
-      description: "All mining workers are being restarted",
-    });
+    if (miningEngine) {
+      miningEngine.stop();
+      setTimeout(() => {
+        miningEngine.start();
+      }, 1000);
+      toast({
+        title: "Workers Restarted",
+        description: "All mining workers are being restarted",
+      });
+    }
   };
 
   const handleOptimizeSettings = () => {
@@ -56,18 +107,30 @@ export function ControlPanel() {
           <div className="space-y-4">
             <h4 className="text-sm font-medium text-card-foreground">Quick Actions</h4>
             <div className="space-y-2">
-              <Button 
-                variant="destructive" 
-                className="w-full"
-                onClick={handleStopMining}
-              >
-                <StopCircle className="w-4 h-4 mr-2" />
-                Stop Mining
-              </Button>
+              {isMining ? (
+                <Button 
+                  variant="destructive" 
+                  className="w-full"
+                  onClick={handleStopMining}
+                >
+                  <StopCircle className="w-4 h-4 mr-2" />
+                  Stop Mining
+                </Button>
+              ) : (
+                <Button 
+                  variant="default" 
+                  className="w-full"
+                  onClick={handleStartMining}
+                >
+                  <Play className="w-4 h-4 mr-2" />
+                  Start Mining
+                </Button>
+              )}
               <Button 
                 variant="secondary" 
                 className="w-full"
                 onClick={handleRestartMining}
+                disabled={!isMining}
               >
                 <RefreshCw className="w-4 h-4 mr-2" />
                 Restart Workers
@@ -136,11 +199,15 @@ export function ControlPanel() {
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Mining Engine</span>
-                <span className="text-sm text-accent font-medium">Active</span>
+                <span className={`text-sm font-medium ${isMining ? 'text-accent' : 'text-muted-foreground'}`}>
+                  {isMining ? 'Active' : 'Inactive'}
+                </span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Web Workers</span>
-                <span className="text-sm text-card-foreground">8/8 Running</span>
+                <span className="text-sm text-card-foreground">
+                  {miningEngine ? `${miningEngine.workers?.length || 0}/${navigator.hardwareConcurrency || 4}` : '0/0'} {isMining ? 'Running' : 'Stopped'}
+                </span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Stratum Proxy</span>

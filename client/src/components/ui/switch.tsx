@@ -1,4 +1,3 @@
-
 import * as React from "react"
 import { cn } from "@/lib/utils"
 
@@ -11,8 +10,8 @@ interface SwitchProps {
 }
 
 const Switch = React.forwardRef<HTMLButtonElement, SwitchProps>(
-  ({ className, checked, onChange, disabled, ...props }, ref) => {
-    const [isChecked, setIsChecked] = React.useState(checked || false);
+  ({ className, checked, defaultChecked, onChange, disabled, ...props }, ref) => {
+    const [isChecked, setIsChecked] = React.useState(checked ?? defaultChecked ?? false);
 
     React.useEffect(() => {
       if (checked !== undefined) {

@@ -97,21 +97,47 @@ export class MiningEngine {
     this.isRunning = true;
     console.log(`Starting mining with wallet: ${this.miningWallet}`);
     
-    this.workers.forEach(worker => {
-      worker.postMessage({ 
-        type: 'start_mining',
-        wallet: this.miningWallet,
-        pool: 'eth-us-east1.nanopool.org:9999',
-        apiKey: this.apiKey
-      });
+    this.workers.forEach((worker, index) => {
+      try {
+        worker.postMessage({ 
+          type: 'start_mining',
+          wallet: this.miningWallet,
+          pool: 'eth-us-east1.nanopool.org:9999',
+          apiKey: this.apiKey,
+          workerId: index
+        });
+      } catch (error) {
+        console.error(`Failed to start worker ${index}:`, error);
+      }
     });
+
+    // Dispatch mining started event
+    window.dispatchEvent(new CustomEvent('mining-started', { 
+      detail: { 
+        wallet: this.miningWallet,
+        workers: this.workers.length,
+        timestamp: Date.now()
+      } 
+    }));
   }
 
   public stop() {
     this.isRunning = false;
-    this.workers.forEach(worker => {
-      worker.postMessage({ type: 'stop_mining' });
+    this.workers.forEach((worker, index) => {
+      try {
+        worker.postMessage({ type: 'stop_mining' });
+      } catch (error) {
+        console.error(`Failed to stop worker ${index}:`, error);
+      }
     });
+
+    // Dispatch mining stopped event
+    window.dispatchEvent(new CustomEvent('mining-stopped', { 
+      detail: { 
+        wallet: this.miningWallet,
+        timestamp: Date.now()
+      } 
+    }));
   }
 
   public getStatus() {
