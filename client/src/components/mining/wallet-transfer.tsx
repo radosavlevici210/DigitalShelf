@@ -81,6 +81,85 @@ export function WalletTransfer({ availableBalance }: WalletTransferProps) {
     }
   }, [toAddress]);
 
+  const handleCustomTransfer = async () => {
+    if (!toAddress || !amount) {
+      toast({
+        title: "Error",
+        description: "Please enter destination address and amount",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    const transferAmount = parseFloat(amount);
+    const fee = estimatedFee;
+
+    if (transferAmount + fee > realTimeBalance) {
+      toast({
+        title: "Error",
+        description: "Insufficient balance including fees",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setIsTransferring(true);
+
+    try {
+      const response = await fetch('/api/wallet/transfer', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          fromAddress: "0xe246E8773056bc770A4949811AE9223Bcf3c1A3A",
+          toAddress,
+          amount: transferAmount,
+          apiKey: "5AGBVWW-XB34K4A-PM3W2DY-4ATYZ02",
+          method: transferMethod
+        })
+      });
+
+      const result = await response.json();
+
+      if (response.ok) {
+        const newTransfer: TransferHistory = {
+          id: Date.now().toString(),
+          amount: transferAmount,
+          recipient: toAddress,
+          status: 'pending',
+          timestamp: new Date(),
+          txHash: result.txHash,
+          fee: fee
+        };
+        
+        setTransferHistory(prev => [newTransfer, ...prev]);
+        
+        toast({
+          title: "Transfer Initiated",
+          description: `${transferAmount.toFixed(6)} ETH transfer to ${toAddress.slice(0, 10)}... initiated`,
+        });
+        
+        setToAddress("");
+        setAmount("");
+      } else {
+        toast({
+          title: "Transfer Failed",
+          description: result.error || "Unknown error occurred",
+          variant: "destructive"
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Transfer Failed",
+        description: "Network error occurred",
+        variant: "destructive"
+      });
+    } finally {
+      setIsTransferring(false);
+    }
+  };
+
   const handleTransferAll = async () => {
     if (!toAddress) {
       toast({
@@ -332,7 +411,7 @@ export function WalletTransfer({ availableBalance }: WalletTransferProps) {
 
         <div className="grid grid-cols-1 gap-2">
           <Button 
-            onClick={amount ? handleCustomTransfer : handleTransferAll}
+            onClick={handleTransferAll}
             disabled={isTransferring || !toAddress || !isValidAddress}
             className="bg-primary text-primary-foreground hover:bg-primary/90"
           >
@@ -341,7 +420,7 @@ export function WalletTransfer({ availableBalance }: WalletTransferProps) {
             ) : (
               <Send className="mr-2 h-4 w-4" />
             )}
-            {amount ? `Transfer ${amount} ETH` : 'Transfer All'}
+            Transfer All
           </Button>
           
           <Button 
