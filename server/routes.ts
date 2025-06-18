@@ -372,8 +372,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               'Authorization': `Bearer ${apiKey}`,
               'X-Chain-ID': network.chainId.toString()
             },
-            body: JSON.stringify(transferPayload),
-            timeout: 10000
+            body: JSON.stringify(transferPayload)
           });
           
           transferResults.push({
@@ -386,7 +385,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           transferResults.push({
             network: network.name,
             success: false,
-            error: error.message
+            error: error instanceof Error ? error.message : 'Unknown error'
           });
         }
       }
@@ -467,7 +466,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         instant: 0.005   // 0.005 ETH
       };
       
-      const withdrawalFee = fees[withdrawalMethod] || fees.standard;
+      const withdrawalFee = fees[withdrawalMethod as keyof typeof fees] || fees.standard;
       const totalDeduction = withdrawAmount + withdrawalFee;
       
       // Check available balance
